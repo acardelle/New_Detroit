@@ -1,0 +1,379 @@
+---
+title: "FIve"
+author: "Keana Flores"
+date: "10/2/2021"
+output: html_document
+---
+
+```{r}
+options(java.parameters = "-Xmx2G")
+
+library(r5r)
+library(osmextract)
+library(tidyverse)
+library(sf)
+library(ggthemes)
+library(ggspatial)
+library(tigris)
+library(wesanderson)
+library(tidytransit)
+
+```
+
+```{r}
+DET_file <- oe_match("DET")
+
+```
+
+```{r}
+DET_streets <- oe_read("networks/bbbike_detroit.pbf",
+
+                               download_directory = "networks",
+
+                               layer = "lines",
+
+                               quiet = TRUE) %>%
+  
+  filter(!is.na(highway))
+
+```
+
+```{r}
+ggplot(DET_streets) +
+  geom_sf()
+
+```
+
+```{r}
+michigan_state_plane <- "+proj=lcc +lat_1=43.66666666666666 +lat_2=42.1 +lat_0=41.5 +lon_0=-84.36666666666666 +x_0=3999999.999984 +y_0=0 +ellps=GRS80 +datum=NAD83 +to_meter=0.3048 +no_defs"
+
+DET_city_limits <- places("Michigan") %>%
+  filter(NAME == "DET") %>%
+  st_transform(crs = st_crs(DET_streets))
+
+
+DET_streets <- DET_streets[DET_city_limits,]
+
+ggplot(DET_streets) +
+  geom_sf() +
+  coord_sf(crs = michigan_state_plane) 
+
+```
+```{r}
+DET_library <- oe_read("networks/bbbike_detroit.pbf", 
+                   provider = "openstreetmap_fr", 
+                   download_directory = "networks", 
+                   layer = "points", 
+                   quiet = TRUE) %>%
+  filter(str_detect(other_tags, '"amenity"=>"library')) %>%
+  st_filter(DET_city_limits) %>%
+  rename(id = osm_id)
+
+ggplot(DET_streets) +
+  geom_sf(color = 'azure2', alpha = 0.2) +
+  geom_sf(data = DET_library, color = "darkorchid1") +
+  coord_sf(crs = michigan_state_plane)  +
+  theme_void()
+
+```
+
+```{r}
+grid <- st_sf(st_make_grid(DET_city_limits, 
+                           square = FALSE, 
+                           n = c(100,100),
+                           what = "polygons")) %>%
+  st_filter(DET_city_limits) 
+
+colnames(grid) <- "geometry"
+st_geometry(grid) <- "geometry"
+
+grid <- grid %>%
+  mutate(id = seq(1, length(grid$geometry), by=1))
+
+grid_points <- st_centroid(grid)
+
+ggplot(grid) +
+  geom_sf() +
+  geom_sf(data = DET_library, color = "chartreuse") +
+  geom_sf(data = DET_streets, alpha = 0.2) +
+  coord_sf(crs = michigan_state_plane) + 
+  theme_map()
+
+```
+
+```{r}
+r5r_core <- setup_r5("networks", verbose = FALSE)
+
+
+```
+
+```{r}
+ttm <- travel_time_matrix(r5r_core = r5r_core,
+                          origins = DET_library,
+                          destinations = grid_points,
+                          mode = c("WALK"),
+                          departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+                                 format = "%d-%m-%Y %H:%M:%S"),
+                          max_walk_dist = 1609.34,
+                          max_trip_duration = 480,
+                          verbose = FALSE)
+```
+
+```{r}
+tt_wide <- ttm %>%
+  pivot_wider(names_from = fromId, 
+              names_prefix = "from", values_from = travel_time) %>%
+  rename(id = toId) %>% 
+  merge(grid) %>%
+  replace(is.na(.), 999) %>%
+  rowwise() %>%
+  mutate(from_any = min(c_across(starts_with("from")), na.rm = TRUE))
+
+st_geometry(tt_wide) <- "geometry"
+```
+
+```{r}
+ggplot(DET_streets) +
+  geom_sf(data = tt_wide, 
+          aes(fill = from_any), 
+          color = NA) +
+  geom_sf(alpha = 0.5) +
+  scale_fill_gradient2(low = "green", mid = "yellow", high = "red", 
+                       midpoint = 30,
+        name = "Walk\ntime to the\nnearest library\n(minutes)") +
+  coord_sf(crs = michigan_state_plane) +
+  theme_map()
+
+```
+
+```{r}
+iso_pallete <- wes_palette("Darjeeling1", n = 5)
+
+iso10min <- tt_wide[tt_wide$from_any < 11,] %>%
+  st_union()
+
+iso20min <- tt_wide[tt_wide$from_any < 21,] %>%
+  st_union()
+
+iso30min <- tt_wide[tt_wide$from_any < 31,] %>%
+  st_union()
+
+ggplot(DET_streets) +
+  geom_sf(data = iso30min, 
+          aes(fill = "Area within 30 minutes"), 
+          color = NA) +
+  geom_sf(data = iso20min, 
+          aes(fill = "Area within 20 minutes"), 
+          color = NA) +
+  geom_sf(data = iso10min, 
+          aes(fill = "Area within 10 minutes"), 
+          color = NA) +
+  geom_sf(alpha = 0.5) +
+  scale_fill_manual(values = c(iso_pallete[1], 
+                               iso_pallete[3],
+                               iso_pallete[5]),
+        name = "Walk\ntime to the\nnearest library\n(minutes)") +
+  coord_sf(crs = michigan_state_plane) +
+  theme_map()
+
+```
+
+
+
+```{r}
+DET_transit <- read_gtfs(file.path("networks", "gtfs.zip"))
+
+transit_stops <- st_as_sf(DET_transit$stops, 
+                          coords = c("stop_lon", "stop_lat"), 
+                          crs =st_crs(grid))
+```
+
+```{r}
+transit_grid <- grid %>%
+  mutate(num_stops = lengths(st_covers(grid, transit_stops)))
+
+transit_points <- st_centroid(transit_grid)
+
+ggplot(transit_points) +
+  geom_sf(aes(color = as.character(num_stops))) +
+  scale_color_manual(values = c("gray", "cornsilk", "lightgreen", "darkseagreen2", "deeppink", "darkslategray4", "khaki3", "greenyellow", "indianred","lightpink1", "lightsalmon1", "olivedrab1" ), 
+                    name = "Number of\ntransit stops") +
+  theme_void()
+
+```
+
+
+```{r}
+transit_grid <- grid %>%
+  mutate(num_stops = lengths(st_covers(grid, transit_stops)))
+
+transit_points <- st_centroid(transit_grid)
+
+ggplot(transit_points) +
+  geom_sf(aes(color = as.character(num_stops))) +
+  scale_color_manual(values = c("gray", "cornsilk", "lightgreen", "darkseagreen2", "deeppink", "darkslategray4", "khaki3", "greenyellow", "indianred","lightpink1", "lightsalmon1", "olivedrab1" ), 
+                    name = "Number of\ntransit stops") +
+  theme_void()
+
+```
+
+
+
+```{r}
+transit_access <- accessibility(r5r_core,
+                        origins = transit_points,
+                        destinations = transit_points,
+                        mode = "WALK",
+                        opportunities_colname = "num_stops",
+                        decay_function = "step",
+                        cutoffs = 11,
+                        departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+                                 format = "%d-%m-%Y %H:%M:%S"),
+                        max_walk_dist = 500,
+                        time_window = 60,
+                        percentiles = 50,
+                        verbose = FALSE) %>%
+  mutate(id = as.numeric(from_id)) %>%
+  merge(grid)
+
+st_geometry(transit_access) <- "geometry"
+
+ggplot(transit_access) +
+  geom_sf(aes(fill = accessibility), color = NA) +
+  scale_fill_viridis_c(name = "Transit stops\nwithin 10-minutes\nwalk") +
+  coord_sf(crs = michigan_state_plane) +
+  theme_void()
+
+
+
+```
+```{r}
+transit_access2 <- accessibility(r5r_core,
+                        origins = transit_points,
+                        destinations = transit_points,
+                        mode = "WALK",
+                        opportunities_colname = "num_stops",
+                        decay_function = "exponential",
+                        cutoffs = 5,
+                        departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+                                 format = "%d-%m-%Y %H:%M:%S"),
+                        max_walk_dist = 500,
+                        time_window = 60,
+                        percentiles = 50,
+                        verbose = FALSE) %>%
+  mutate(id = as.numeric(from_id)) %>%
+  merge(grid)
+
+st_geometry(transit_access2) <- "geometry"
+
+ggplot(transit_access2) +
+  geom_sf(aes(fill = accessibility), color = NA) +
+  scale_fill_viridis_c(name = "Accessiblity score") +
+  coord_sf(crs = michigan_state_plane) +
+  theme_void()
+
+```
+
+```{r}
+stop_r5(r5r_core)
+rJava::.jgc(R.gc = TRUE)
+
+```
+
+```{r}
+st_write(transit_access2, 'DET_access.geojson', append=FALSE, quiet=TRUE )
+
+```
+
+
+
+
+```{r}
+options(java.parameters = "-Xmx2G")
+```
+
+
+```{r}
+install.packages("stars")
+```
+
+```{r}
+library(stars)
+library(sf)
+library(tidyverse)
+library(osmextract)
+library(tigris)
+
+```
+
+```{r}
+access_poly <- st_read("DET_access.geojson", quiet=TRUE)
+
+access_raster <- st_rasterize(access_poly["accessibility"], 
+                              nx = 100, ny = 100) 
+plot(access_raster)
+
+```
+```{r}
+DET_city_limits <- places("Michigan") %>%
+  filter(NAME == "DET") 
+
+DET_streets <- oe_read("networks/bbbike_detroit.pbf", 
+                   provider = "openstreetmap_fr", 
+                   download_directory = "networks", 
+                   layer = "lines", 
+                   quiet = TRUE) %>%
+  
+  filter(!is.na(highway)) %>%
+  st_transform(crs = st_crs(DET_city_limits)) %>%
+  st_filter(DET_city_limits)
+
+ggplot(DET_streets) +
+  geom_stars(data = access_raster) +
+  geom_sf(color = "white", alpha = 0.2) +
+  scale_fill_viridis_c(na.value = NA, 
+                       option="A",
+                       name = "Pedestrian access to\ntransit stops") +
+  theme_void()
+
+```
+```{r}
+
+access_points <- st_as_sf(access_raster, as_points = TRUE)
+
+ggplot(DET_streets) +
+  geom_sf(data = access_points, aes(color = accessibility), size = 0.1) +
+  scale_color_viridis_c(na.value = NA, 
+                       option="A",
+                       name = "Pedestrian access to\ntransit stops") +
+  theme_void()
+
+```
+
+```{r}
+access_poly2 <- st_as_sf(access_raster, as_points = FALSE, merge = TRUE)
+
+ggplot(DET_streets) +
+  geom_sf(data = access_poly2, aes(fill = accessibility), color = 'gray') +
+  scale_fill_viridis_c(na.value = NA, 
+                       option="A",
+                       name = "Pedestrian access to\ntransit stops") +
+  theme_void()
+
+```
+```{r}
+access_contours <- st_contour(access_raster, contour_lines = TRUE, 
+                              breaks = c(0,2,4,6,8))
+
+ggplot(DET_streets) +
+  geom_sf(color = "gray", alpha = 0.2, size = 0.25 ) +
+  geom_sf(data = access_contours, aes(color = accessibility), fill = NA) +
+  scale_color_viridis_c(na.value = NA, 
+                       option="A",
+                       breaks = c(0,2,4,6,8),
+                       name = "Pedestrian access to\ntransit stops") +
+  theme_void()
+
+```
+
+
