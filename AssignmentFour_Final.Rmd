@@ -21,7 +21,7 @@ library(tidytransit)
 ```
 
 ```{r}
-DET_file <- oe_match("DET")
+# DET_file <- oe_match("Detroit")
 
 ```
 
@@ -48,7 +48,7 @@ ggplot(DET_streets) +
 michigan_state_plane <- "+proj=lcc +lat_1=43.66666666666666 +lat_2=42.1 +lat_0=41.5 +lon_0=-84.36666666666666 +x_0=3999999.999984 +y_0=0 +ellps=GRS80 +datum=NAD83 +to_meter=0.3048 +no_defs"
 
 DET_city_limits <- places("Michigan") %>%
-  filter(NAME == "DET") %>%
+  filter(NAME == "detroit") %>%
   st_transform(crs = st_crs(DET_streets))
 
 

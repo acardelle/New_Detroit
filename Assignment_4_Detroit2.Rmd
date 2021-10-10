@@ -1,5 +1,5 @@
 ---
-title: "Assignment 4-Detroit"
+title: "Assignment4-Detroit"
 output: html_document
 ---
 
@@ -13,17 +13,9 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
-```
-
 ## Including Plots
 
 You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
@@ -43,7 +35,7 @@ library(stars)
 
 ```
 
-```{r}
+```{r, eval=FALSE}
 dir.create("network2")
 
 download.file("https://www.detroitmi.gov/Portals/0/docs/deptoftransportation/pdfs/ddot_gtfs.zip", file.path("network2","ddot_gtfs.zip"), mode = "wb", quiet=TRUE)
@@ -64,7 +56,7 @@ Detroit_streets <- oe_read("networks/bbbike_detroit.pbf",
 
 ```{r}
 ggplot() +
-  geom_sf(data=Detroit_streets, alpha = 0.1) +
+  geom_sf(data=Detroit_streets) +
   theme_map()
 
 ```
@@ -80,15 +72,15 @@ Detroit_city_limits <- places("Michigan") %>%
 Detroit_streets <- Detroit_streets[Detroit_city_limits,]
 
 ggplot() +
-  geom_sf(data = Detroit_streets, alpha = 0.1) +
+  geom_sf(data = Detroit_streets) +
   coord_sf(crs = michigan_state_plane)
 
 ```
 
 ```{r}
-Detroit_parking <- oe_read("network2/bbbike_detroit.pbf",
+Detroit_parking <- oe_read("networks/bbbike_detroit.pbf",
                    provider = "openstreetmap_fr",
-                   download_directory = "network2",
+                   download_directory = "networks",
                    layer = "points",
                    quiet = TRUE) %>%
   filter(str_detect(other_tags,'"amenity"=>"parking"')) %>%
@@ -98,7 +90,7 @@ Detroit_parking <- oe_read("network2/bbbike_detroit.pbf",
 
 ```{r}
 ggplot(Detroit_streets) +
-  geom_sf(color = 'black', alpha = 0.1) +
+  geom_sf(color = 'black') +
   geom_sf(data = Detroit_parking, color = "red") +
   coord_sf(crs = michigan_state_plane)  +
   theme_void()
@@ -135,16 +127,16 @@ ggplot() +
 
 
 ```{r}
-r5r_core <- setup_r5("network2", verbose = FALSE)
+r5r_core <- setup_r5("networks", verbose = FALSE)
 ```
 
 
-```{r}
+```{r , verbose=FALSE, results='HIDE', warning=FALSE, message=FALSE, echo=FALSE}
 ttm <- travel_time_matrix(r5r_core = r5r_core,
                           origins = st_transform(x = Detroit_parking, crs = "WGS84"),
                           destinations = st_transform(x = grid_points, crs = "WGS84"),
                           mode = "WALK",
-                          departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+                          departure_datetime = as.POSIXct(tz="GMT","15-11-2021 14:00:00",
                                  format = "%d-%m-%Y %H:%M:%S"),
                           max_walk_dist = 1000,
                           max_trip_duration = 480,
@@ -171,7 +163,7 @@ ggplot() +
   geom_sf(data = tt_wide, 
           aes(fill = from_any), 
           color = NA) +
-  geom_sf(data = Detroit_streets, alpha = 0.2) +
+  geom_sf(data = Detroit_streets) +
   scale_fill_gradientn(colors = wes_palette(name = "Chevalier1", n= 3, type = "continuous"),
         name = "Walking time to\nthe nearest parking \nstructure (minutes)",
         position = "right") +
@@ -203,7 +195,7 @@ ggplot() +
           aes(fill = "Area within 20 minutes"), 
           color = NA) +
   geom_sf(alpha = 0.5) +
-  geom_sf(data = Detroit_streets, alpha = 0.2)+
+  geom_sf(data = Detroit_streets)+
   scale_fill_manual(values = c(iso_pallete[1], 
                                iso_pallete[3],
                                iso_pallete[5]),
@@ -317,7 +309,7 @@ stop_r5(r5r_core)
 rJava::.jgc(R.gc = TRUE)
 ```
 
-```{r}
+```{r, eval=FALSE}
 st_write(Parking_access2, 'Detroit_access.geojson', append=FALSE, quiet=TRUE )
 ```
 
@@ -332,7 +324,7 @@ plot(access_raster)
 ```{r}
 ggplot(Detroit_streets) +
   geom_stars(data = access_raster) +
-  geom_sf(color = "white", alpha = 0.05) +
+  geom_sf(color = "white") +
   scale_fill_viridis_c(na.value = NA, 
                        option="A",
                        name = "Pedestrian access to\nparking structures") +
@@ -366,7 +358,7 @@ access_contours <- st_contour(access_raster, contour_lines = TRUE,
                               breaks = c(0,1,2,3,5))
 
 ggplot(Detroit_streets) +
-  geom_sf(color = "gray", alpha = 0.2) +
+  geom_sf(color = "gray") +
   geom_sf(data = access_contours, aes(color = accessibility), fill = NA) +
   scale_color_viridis_c(na.value = NA, 
                        option="A",
@@ -384,14 +376,14 @@ ggplot(Detroit_streets) +
 #Detroit Kindergarten Assignment 4+5
 
 ```{r}
-r5r_core <- setup_r5("network2", verbose = FALSE)
+r5r_core <- setup_r5("networks", verbose = FALSE)
 ```
 
 
-```{r}
-Detroit_kindergarten <- oe_read("network2/bbbike_detroit.pbf",
+```{r Aeshnas Kindergarten Loading Generator}
+Detroit_kindergarten <- oe_read("networks/bbbike_detroit.pbf",
                    provider = "openstreetmap_fr",
-                   download_directory = "network2",
+                   download_directory = "network",
                    layer = "points",
                    quiet = TRUE) %>%
   filter(str_detect(other_tags,'"amenity"=>"kindergarten"')) %>%
@@ -399,15 +391,15 @@ Detroit_kindergarten <- oe_read("network2/bbbike_detroit.pbf",
   rename(id = osm_id)
 ```
 
-```{r}
+```{r Aeshnas Streets and Kindergarten Locations}
 ggplot(Detroit_streets) +
-  geom_sf(color = 'black', alpha = 0.2) +
+  geom_sf(color = 'black') +
   geom_sf(data = Detroit_kindergarten, color = "pink") +
   coord_sf(crs = michigan_state_plane)  +
   theme_void()
 ```
 
-```{r}
+```{r Aeshnas Detroit Grid that Might Not Be Needed}
 grid <- st_sf(st_make_grid(Detroit_city_limits, 
                            square = FALSE, 
                            n = c(100,100),
@@ -436,7 +428,7 @@ ggplot() +
 ```
 
 ```{r}
-r5r_core <- setup_r5("network2", verbose = FALSE)
+r5r_core <- setup_r5("networks", verbose = FALSE)
 ```
 
 ```{r}
@@ -451,7 +443,7 @@ ttm2 <- travel_time_matrix(r5r_core = r5r_core,
                           verbose = FALSE)
 ```
 
-```{r}
+```{r Aeshnas Walking Time Generator}
 tt_wide2 <- ttm2 %>%
   pivot_wider(names_from = fromId, 
               names_prefix = "from", values_from = travel_time) %>%
@@ -465,7 +457,7 @@ st_geometry(tt_wide2) <- "geometry"
 ```
 
 
-```{r}
+```{r Aeshnas Walking Time to Kinder}
 ggplot() +
   geom_sf(data = tt_wide2, 
           aes(fill = from_any), 
@@ -479,7 +471,7 @@ ggplot() +
   theme(legend.position = "right")
 ```
 
-```{r}
+```{r Aeshnas Kinder Acess Isochrone}
 iso_pallete <- wes_palette("Zissou1", n = 5)
 
 iso20min <- tt_wide2[tt_wide2$from_any < 11,] %>%
@@ -501,7 +493,7 @@ ggplot(Detroit_streets) +
   geom_sf(data = iso20min, 
           aes(fill = "Area within 20 minutes"), 
           color = NA) +
-  geom_sf(alpha = 0.5) +
+  geom_sf() +
   scale_fill_manual(values = c(iso_pallete[1], 
                                iso_pallete[3],
                                iso_pallete[5]),
@@ -517,7 +509,7 @@ kindergarten_grid <- grid %>%
 kindergarten_points <- st_centroid(kindergarten_grid)
 ```
 
-```{r}
+```{r Aeshnas Number of Kindergartens}
 ggplot(parking_points) +
   geom_sf(aes(color = as.character(num_parking))) +
   scale_color_manual(values = c("gray","lightblue", "darkblue", "black"), 
@@ -526,7 +518,7 @@ ggplot(parking_points) +
 ```
 
 
-```{r}
+```{r Aeshnas Kinder Accessibility Machine}
 Detroit_access_kindergarten <- accessibility(r5r_core, 
                                         origins = kindergarten_points,
                                         destinations = kindergarten_points,
@@ -542,7 +534,7 @@ mutate(id = as.numeric(from_id)) %>%
   merge(grid)
 ```
 
-```{r}
+```{r Aeshnas Ped Access to Kinder within 20 mins}
 st_geometry(Detroit_access_kindergarten) <- "geometry"
 
 ggplot(Detroit_access_kindergarten) +
@@ -552,7 +544,7 @@ ggplot(Detroit_access_kindergarten) +
   theme_void()
 ```
 
-```{r}
+```{r Aeshnas Kinder Access Accessibility Score}
 Kindergarten_access2 <- accessibility(r5r_core,
                         origins = kindergarten_points,
                         destinations = kindergarten_points,
@@ -578,15 +570,15 @@ ggplot(Kindergarten_access2) +
   theme_void()
 ```
 
-```{r}
+```{r, eval=FALSE}
 stop_r5(r5r_core)
 ```
 
-```{r}
+```{r, eval=FALSE}
 rJava::.jgc(R.gc = TRUE)
 ```
 
-```{r}
+```{r, eval=FALSE}
 st_write(Kindergarten_access2, 'Detroit_kindergarten_access.geojson', append=FALSE, quiet=TRUE )
 ```
 
@@ -598,10 +590,10 @@ access_raster3 <- st_rasterize(access_poly3["accessibility"],
 plot(access_raster3)
 ```
 
-```{r}
+```{r Aeshnas Ped Access to Kinder with Raster}
 ggplot(Detroit_streets) +
   geom_stars(data = access_raster3) +
-  geom_sf(color = "white", alpha = 0.05) +
+  geom_sf(color = "white") +
   scale_fill_viridis_c(na.value = NA, 
                        option="A",
                        name = "Pedestrian access to\nkindergartens") +
@@ -619,7 +611,7 @@ ggplot(Detroit_streets) +
   theme_void()
 ```
 
-```{r}
+```{r Aeshnas Pedestrian Access to NUmber of Kindergartens}
 access_poly4 <- st_as_sf(access_raster3, as_points = FALSE, merge = TRUE)
 
 ggplot(Detroit_streets) +
@@ -630,12 +622,12 @@ ggplot(Detroit_streets) +
   theme_void()
 ```
 
-```{r}
+```{r Aeshnas Kindergarten Access Contour}
 access_contours2 <- st_contour(access_raster3, contour_lines = TRUE, 
                               breaks = c(0,1,2,3,5))
 
 ggplot(Detroit_streets) +
-  geom_sf(color = "gray", alpha = 0.2) +
+  geom_sf(color = "gray") +
   geom_sf(data = access_contours2, aes(color = accessibility), fill = NA) +
   scale_color_viridis_c(na.value = NA, 
                        option="A",
@@ -658,7 +650,7 @@ transit_stops <- st_as_sf(Detroit_transit$stops,
                           crs =st_crs(grid))
 ```
 
-```{r}
+```{r Aeshnas transit stops}
 transit_grid <- grid %>%
   mutate(num_stops = lengths(st_covers(grid, transit_stops)))
 
@@ -671,7 +663,7 @@ ggplot(transit_points) +
   theme_void()
 ```
 
-```{r}
+```{r Aeshnas transit within 10 minutes}
 
 transit_access <- accessibility(r5r_core,
                         origins = transit_points,
@@ -698,7 +690,7 @@ ggplot(transit_access) +
   theme_void()
 ```
 
-```{r}
+```{r Aeshnas transit accessibility score}
 transit_access2 <- accessibility(r5r_core,
                         origins = transit_points,
                         destinations = transit_points,
@@ -732,7 +724,7 @@ stop_r5(r5r_core)
 rJava::.jgc(R.gc = TRUE)
 ```
 
-```{r}
+```{r, eval=FALSE}
 st_write(transit_access2, 'Detroit_transit_access.geojson', append=FALSE, quiet=TRUE )
 ```
 
@@ -747,7 +739,7 @@ plot(access_raster_transit)
 ```{r}
 ggplot(Detroit_streets) +
   geom_stars(data = access_raster_transit) +
-  geom_sf(color = "white", alpha = 0.05) +
+  geom_sf(color = "white") +
   scale_fill_viridis_c(na.value = NA, 
                        option="A",
                        name = "Pedestrian access to\ntransit stops") +
@@ -786,8 +778,11 @@ ggplot(Detroit_streets) +
 
 #Other Data Sets for points:
 
-```{r}
-Detroit_clinic <- oe_read("network2/bbbike_detroit.pbf",
+```{r other data sets, eval=FALSE, results='hide'}
+
+# clinics
+
+Detroit_clinic <- oe_read("networks/bbbike_detroit.pbf",
                    provider = "openstreetmap_fr",
                    download_directory = "network2",
                    layer = "points",
@@ -795,9 +790,9 @@ Detroit_clinic <- oe_read("network2/bbbike_detroit.pbf",
   filter(str_detect(other_tags,'"amenity"=>"clinic"')) %>%
   st_filter(Detroit_city_limits) %>%
   rename(id = osm_id)
-```
 
-```{r}
+# marketplaces
+
 Detroit_marketplace <- oe_read("network2/bbbike_detroit.pbf",
                    provider = "openstreetmap_fr",
                    download_directory = "network2",
@@ -806,9 +801,9 @@ Detroit_marketplace <- oe_read("network2/bbbike_detroit.pbf",
   filter(str_detect(other_tags,'"amenity"=>"marketplace"')) %>%
   st_filter(Detroit_city_limits) %>%
   rename(id = osm_id)
-```
 
-```{r}
+# police stations
+
 Detroit_police <- oe_read("network2/bbbike_detroit.pbf",
                    provider = "openstreetmap_fr",
                    download_directory = "network2",
