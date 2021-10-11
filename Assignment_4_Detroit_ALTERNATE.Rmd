@@ -19,7 +19,7 @@ Intrigued by this need, and coupling with Detroit's relatively flat geography, w
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r load packages, echo=FALSE, eval=FALSE, quiet=FALSE, results='hide'}
+```{r load packages, echo=FALSE, eval=FALSE, include=TRUE}
 options(java.parameters = "-Xmx6G")
 
 library(r5r)
@@ -602,14 +602,13 @@ ggplot(Detroit_streets) +
                        name = "Accessibility score \nof bicycle access to\nlibraries") +
   theme_void()
 ```
+```{r plot Alex_4B, dpi=300, echo=FALSE}
+plot(image_read("images/Alex_4B.png"))
+```
 In our final analysis map, we calculated an accessibility score for library access for Detroit's neighborhoods. With this more granular detail, we can distill that the only place in the city with generous library access is the Downtown/CBD. The vast majority of the city has limited access to a single library at best, and in many areas (shown in black here), libraries remain scare and faraway.
 
 ### Closing Thoughts
 Our analysis has revealed that much needs to be improved in the realm of physical access to neighborhood educational institutions in Detroit. Perhaps with the exception of the Downtown area, more cycling infrastructure, or library facilities themselves, need to be added throughout the city. Schools seem more equally distributed, although the disparate cycling times suggest some need for improvement. In terms of urgency, the northwest quadrant's complete lack of library access is the most inequitable and glaring takeaway from our findings.
-
-```{r plot Alex_4B, dpi=300, echo=FALSE}
-plot(image_read("images/Alex_4B.png"))
-```
 
 ### Contribution Statement
 Each member of our group made important and different contributions to the final product. Aeshna sourced all the data and created all the maps regarding Detroit's school system. Keana sourced all the data and created all the maps regarding Detroit's library system. Alex collated our code into a GitHub repository, along with two maps on accessibility. Therefore, the group allocated each individual member an even share of points.
