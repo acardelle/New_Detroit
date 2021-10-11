@@ -1,0 +1,577 @@
+---
+title: "Assignment 4-Detroit"
+output: html_document
+---
+
+```{r setup 1, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load packages, eval=TRUE}
+options(java.parameters = "-Xmx6G")
+
+library(r5r)
+library(osmextract)
+library(tidyverse)
+library(sf)
+library(ggthemes)
+library(ggspatial)
+library(tigris)
+library(wesanderson)
+library(tidytransit)
+library(stars)
+library(magick)
+
+```
+
+```{r create network folder, eval=FALSE}
+dir.create("networks")
+
+download.file("https://www.detroitmi.gov/Portals/0/docs/deptoftransportation/pdfs/ddot_gtfs.zip", file.path("networks","ddot_gtfs.zip"), mode = "wb", quiet=TRUE)
+```
+
+```{r load the variables 2, eval=FALSE}
+Detroit_file <- oe_match("Detroit")
+
+Detroit_streets <- oe_read("networks/bbbike_detroit.pbf",
+                   download_directory = "networks",
+                   layer = "lines",
+                   quiet = TRUE) %>%
+ 
+  filter(!is.na(highway))
+
+michigan_state_plane <- "+proj=lcc +lat_1=43.66666666666666 +lat_2=42.1 +lat_0=41.5 +lon_0=-84.36666666666666 +x_0=3999999.999984 +y_0=0 +ellps=GRS80 +datum=NAD83 +to_meter=0.3048 +no_defs"
+
+Detroit_city_limits <- places("Michigan") %>%
+  filter(NAME == "Detroit") %>%
+  st_transform(crs = st_crs(Detroit_streets))
+
+
+Detroit_streets <- Detroit_streets[Detroit_city_limits,]
+
+```
+
+```{r Detroit street plot, eval=FALSE}
+
+ggplot() +
+  geom_sf(data = Detroit_streets, alpha = 0.1) +
+  coord_sf(crs = michigan_state_plane)
+
+```
+
+```{r, eval=FALSE}
+rJava::.jgc(R.gc = TRUE)
+```
+
+```{r make the grid 3, eval=FALSE}
+grid <- st_sf(st_make_grid(Detroit_city_limits, 
+                           square = FALSE, 
+                           n = c(100,100),
+                           what = "polygons"))%>%
+  st_filter(Detroit_city_limits) 
+
+colnames(grid) <- "geometry"
+st_geometry(grid) <- "geometry"
+
+grid <- grid %>%
+  mutate(id = seq(1, length(grid$geometry), by=1))
+
+
+# ggplot() +
+#   geom_sf(data = grid) +
+#   theme_map()
+```
+
+#Detroit School Work
+
+```{r detroit school variable created 4, eval=FALSE}
+Detroit_school <- oe_read("networks/bbbike_detroit.pbf",
+                   provider = "openstreetmap_fr",
+                   download_directory = "networks",
+                   layer = "points",
+                   quiet = TRUE) %>%
+  filter(str_detect(other_tags,'"amenity"=>"school"')) %>%
+  st_filter(Detroit_city_limits) %>%
+  rename(id = osm_id)
+```
+
+#Aeshna's Schools Map, 0A
+```{r Schools Map 0A 5, dpi = 300,  eval=TRUE}
+# ggplot(Detroit_streets) +
+#   geom_sf(color = 'azure2', alpha = 0.2) +
+#   geom_sf(data = Detroit_school, color = "pink4") +
+#   coord_sf(crs = michigan_state_plane)  +
+#   theme_void()
+
+plot(image_read("images/Aeshna_0A.png"))
+```
+
+
+```{r detroit schools gridded 6, eval=FALSE}
+grid_points <- st_centroid(grid)
+
+ggplot() +
+  geom_sf(data = grid_points, size = 0.75) +
+  geom_sf(data = Detroit_school, color = "pink4") +
+  theme_map()
+```
+
+```{r engage r5r 7, eval=FALSE}
+r5r_core <- setup_r5("networks", verbose = FALSE)
+```
+
+```{r calculate school travel time 8, eval=FALSE}
+ttm_school <- travel_time_matrix(r5r_core = r5r_core,
+                          origins = st_transform(x = Detroit_school, crs = "WGS84"),
+                          destinations = st_transform(x = grid_points, crs = "WGS84"),
+                          mode = "BICYCLE",
+                          departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+                                 format = "%d-%m-%Y %H:%M:%S"),
+                          max_walk_dist = 1000,
+                          max_trip_duration = 480,
+                          verbose = FALSE)
+```
+
+```{r tt_wide school 9, eval=FALSE}
+tt_wide_school <- ttm_school %>%
+  pivot_wider(names_from = fromId, 
+              names_prefix = "from", values_from = travel_time) %>%
+  rename(id = toId) %>% 
+  merge(grid) %>%
+  replace(is.na(.), 999) %>%
+  rowwise() %>%
+  mutate(from_any = min(c_across(starts_with("from")), na.rm = TRUE))
+
+st_geometry(tt_wide_school) <- "geometry"
+```
+
+#Aeshna's Cycling to School Map, 2A
+```{r plot cycling time to the nearest school 10, dpi=300, eval=TRUE}
+# ggplot() +
+#   geom_sf(data = tt_wide_school, 
+#           aes(fill = from_any), 
+#           color = NA) +
+#   geom_sf(data = Detroit_school, color = 'ivory3') +
+#   geom_sf(data = Detroit_streets , alpha = 0.05)+
+#   scale_fill_gradientn(colors = wes_palette(name = "Chevalier1", n= 3, type = "continuous"),
+#         name = "Cycling time to\nthe nearest school\n(minutes)",
+#         position = "right") +
+#   coord_sf(crs = michigan_state_plane) +
+#   theme_map()+
+#   theme(legend.position = "right")
+
+plot(image_read("images/Aeshna_2A.png"))
+```
+
+#Aeshna's School Isochrone Map, 1A
+```{r School Isochrone Map 1A 11, eval=TRUE}
+# iso_pallete <- wes_palette("Royal2", n = 5)
+# 
+# iso5min_school <- tt_wide_school[tt_wide_school$from_any < 6,] %>%
+#   st_union()
+# 
+# iso10min_school <- tt_wide_school[tt_wide_school$from_any < 11,] %>%
+#   st_union()
+# 
+# iso15min_school <- tt_wide_school[tt_wide_school$from_any < 16,] %>%
+#   st_union()
+# 
+# ggplot(Detroit_streets) +
+#   geom_sf(data = iso15min_school, 
+#           aes(fill = "Area within 15 minutes"), 
+#           color = NA) +
+#   geom_sf(data = iso10min_school, 
+#           aes(fill = "Area within 10 minutes"), 
+#           color = NA) +
+#   geom_sf(data = iso5min_school, 
+#           aes(fill = "Area within 5 minutes"), 
+#           color = NA) +
+#   geom_sf(alpha = 0.1) +
+#   scale_fill_manual(values = c(iso_pallete[1], 
+#                                iso_pallete[3],
+#                                iso_pallete[5]),
+#         name = "Cycling \ntime to the\nnearest school\n(minutes)") +
+#   coord_sf(crs = michigan_state_plane) +
+#   theme_map()
+
+plot(image_read("images/Aeshna_1A.png"))
+
+```
+
+```{r school grid 12, eval=FALSE}
+school_grid <- grid %>%
+  mutate(num_school = lengths(st_covers(grid, Detroit_school)))
+
+school_points <- st_centroid(school_grid)
+```
+
+```{r plot the schools 13, eval=FALSE}
+ggplot(school_points) +
+  geom_sf(aes(color = as.character(num_school))) +
+  scale_color_manual(values = c("lightgray", "skyblue", "deepskyblue4", "blue4", "black"), 
+                    name = "Number of\nschools") +
+  theme_void()
+```
+
+```{r accessibility step 14, eval=FALSE}
+Detroit_access_school <- accessibility(r5r_core, 
+                                        origins = school_points,
+                                        destinations = school_points,
+                                        mode = "BICYCLE",
+                                        opportunities_colname = "num_school",
+                                        decay_function = "step",
+                                        cutoffs = 11,
+                                        max_walk_dist = 5000,
+                                        time_window = 120,
+                                        percentile = 50,
+                                        verbose = FALSE) %>%
+mutate(id = as.numeric(from_id)) %>%
+  merge(grid)
+```
+
+#Aeshna's Schools Reachable by Cycling Map, 3A
+```{r Schools Reachable by Cycling Map 3A, eval=TRUE}
+# st_geometry(Detroit_access_school) <- "geometry"
+# 
+# ggplot(Detroit_access_school) +
+#   geom_sf(aes(fill = accessibility), color = NA) +
+#   scale_fill_viridis_c(name = "Schools within \n a 20-minute \nbicycle ride") +
+#   coord_sf(crs = michigan_state_plane) +
+#   theme_void()
+
+plot(image_read("images/Aeshna_3A.png"))
+```
+
+```{r school accessibility decay 16, eval=FALSE}
+Detroit_school_access2 <- accessibility(r5r_core,
+                        origins = school_points,
+                        destinations = school_points,
+                        mode = "BICYCLE",
+                        opportunities_colname = "num_school",
+                        decay_function = "exponential",
+                        cutoffs = 11,
+                        departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+                                 format = "%d-%m-%Y %H:%M:%S"),
+                        max_walk_dist = 5000,
+                        time_window = 120,
+                        percentiles = 50,
+                        verbose = FALSE) %>%
+  mutate(id = as.numeric(from_id)) %>%
+  merge(grid)
+
+st_geometry(Detroit_school_access2) <- "geometry"
+
+ggplot(Detroit_school_access2) +
+  geom_sf(aes(fill = accessibility), color = NA) +
+  scale_fill_viridis_c(name = "Accessiblity score") +
+  coord_sf(crs = michigan_state_plane) +
+  theme_void()
+```
+
+```{r write to java, eval=FALSE}
+rJava::.jgc(R.gc = TRUE)
+
+st_write(Detroit_school_access2, 'Detroit_school_access.geojson', append=FALSE, quiet=TRUE )
+```
+
+```{r rasterize the school accessibility output, eval=FALSE}
+access_poly_school <- st_read("Detroit_school_access.geojson", quiet=TRUE)
+
+access_raster_school <- st_rasterize(access_poly_school["accessibility"], 
+                              nx = 1000, ny = 1000) 
+plot(access_raster_school)
+```
+
+#Aeshna's Cycling to School Accessibility Score Map, 4A
+```{r Cycling to School Accessibility Score Map 4A, eval=TRUE}
+# ggplot(Detroit_streets) +
+#   geom_stars(data = access_raster_school) +
+#   geom_sf(color = "white", alpha = 0.05) +
+#   scale_fill_viridis_c(na.value = NA, 
+#                        option="A",
+#                        name = "Accessibility score \nof bicycle access to\nschools") +
+#   theme_void()
+
+plot(image_read("images/Aeshna_4A.png"))
+
+```
+
+```{r map 1 X, eval=FALSE}
+access_points_school <- st_as_sf(access_raster_school, as_points = TRUE)
+
+ggplot(Detroit_streets) +
+  geom_sf(data = access_points_school, aes(color = accessibility), size = 0.1) +
+  scale_color_viridis_c(na.value = NA, 
+                       option="A",
+                       name = "Bicycle access to\nschools") +
+  theme_void()
+```
+
+```{r map 2, eval=FALSE}
+access_poly_school2 <- st_as_sf(access_raster_school, as_points = FALSE, merge = TRUE)
+
+ggplot(Detroit_streets) +
+  geom_sf(data = access_poly_school2, aes(fill = accessibility), color = 'gray') +
+  scale_fill_viridis_c(na.value = NA, 
+                       option="A",
+                       name = "Bicycle access to\nschools") +
+  theme_void()
+```
+
+```{r map 3, eval=FALSE}
+access_contours_school <- st_contour(access_raster_school, contour_lines = TRUE, 
+                              breaks = c(0,1,2,3,4,5,6,7,8))
+
+ggplot(Detroit_streets) +
+  geom_sf(color = "gray", alpha = 0.2) +
+  geom_sf(data = access_contours_school, aes(color = accessibility), fill = NA) +
+  scale_color_viridis_c(na.value = NA, 
+                       option="A",
+                       breaks = c(0,1,2,3,4,5,6,7,8),
+                       name = "Bicycle access to\nschools") +
+  theme_void()
+```
+
+#Detroit Libraries
+
+#Keana's Libraries Map 0B 
+```{r Libraries Map 0B, eval=TRUE}
+
+# Detroit_library <- oe_read("networks/bbbike_detroit.pbf", 
+#                    provider = "openstreetmap_fr", 
+#                    download_directory = "networks", 
+#                    layer = "points", 
+#                    quiet = TRUE) %>%
+#   filter(str_detect(other_tags, '"amenity"=>"library')) %>%
+#   st_filter(Detroit_city_limits) %>%
+#   rename(id = osm_id)
+# 
+# ggplot(Detroit_streets) +
+#   geom_sf(color = 'azure2', alpha = 0.2) +
+#   geom_sf(data = Detroit_library, color = "darkorchid1") +
+#   coord_sf(crs = michigan_state_plane)  +
+#   theme_void()
+
+plot(image_read("images/Keana_0B.png"))
+
+```
+
+```{r map the libraries, eval=FALSE}
+grid <- st_sf(st_make_grid(Detroit_city_limits, 
+                           square = FALSE, 
+                           n = c(100,100),
+                           what = "polygons")) %>%
+  st_filter(Detroit_city_limits) 
+
+colnames(grid) <- "geometry"
+st_geometry(grid) <- "geometry"
+
+grid <- grid %>%
+  mutate(id = seq(1, length(grid$geometry), by=1))
+
+grid_points <- st_centroid(grid)
+
+ggplot(grid) +
+  geom_sf() +
+  geom_sf(data = Detroit_library, color = "chartreuse") +
+  geom_sf(data = Detroit_streets, alpha = 0.2) +
+  coord_sf(crs = michigan_state_plane) +
+  theme_map()
+
+```
+
+```{r calculate WALK library travel time, eval=FALSE}
+ttm <- travel_time_matrix(r5r_core = r5r_core,
+                          origins = Detroit_library,
+                          destinations = grid_points,
+                          mode = c("WALK"),
+                          departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+                                 format = "%d-%m-%Y %H:%M:%S"),
+                          max_walk_dist = 1609.34,
+                          max_trip_duration = 480,
+                          verbose = FALSE)
+```
+
+```{r calculate BIKE library travel time, eval=FALSE}
+ttm_library <- travel_time_matrix(r5r_core = r5r_core,
+                          origins = st_transform(x = Detroit_library, crs = "WGS84"),
+                          destinations = st_transform(x = grid_points, crs = "WGS84"),
+                          mode = "BICYCLE",
+                          departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+                                 format = "%d-%m-%Y %H:%M:%S"),
+                          max_walk_dist = 1000,
+                          max_trip_duration = 480,
+                          verbose = FALSE)
+```
+
+```{r tt_wide library BIKE, eval=FALSE}
+tt_wide_library <- ttm_library %>%
+  pivot_wider(names_from = fromId, 
+              names_prefix = "from", values_from = travel_time) %>%
+  rename(id = toId) %>% 
+  merge(grid) %>%
+  replace(is.na(.), 999) %>%
+  rowwise() %>%
+  mutate(from_any = min(c_across(starts_with("from")), na.rm = TRUE))
+
+st_geometry(tt_wide_library) <- "geometry"
+```
+
+```{r ttm wide WALK, eval=FALSE}
+tt_wide <- ttm %>%
+  pivot_wider(names_from = fromId, 
+              names_prefix = "from", values_from = travel_time) %>%
+  rename(id = toId) %>% 
+  merge(grid) %>%
+  replace(is.na(.), 999) %>%
+  rowwise() %>%
+  mutate(from_any = min(c_across(starts_with("from")), na.rm = TRUE))
+
+st_geometry(tt_wide) <- "geometry"
+```
+
+#Keana's Cycling to Library Map, 2B
+```{r Cycling to Library Map, eval=TRUE}
+# ggplot(Detroit_streets) +
+#   geom_sf(data = tt_wide_library, 
+#           aes(fill = from_any), 
+#           color = NA) +
+#   geom_sf(alpha = 0.1) +
+#   scale_fill_gradient2(low = "green", mid = "yellow", high = "red", 
+#                        midpoint = 30,
+#         name = "bike\ntime to the\nnearest library\n(minutes)") +
+#   coord_sf(crs = michigan_state_plane) +
+#   theme_map()
+
+plot(image_read("images/Keana_2B.png"))
+
+```
+
+#Keana's Library Isochrone, 1B
+```{r library isochrone, eval=TRUE}
+# iso_pallete <- wes_palette("Darjeeling1", n = 5)
+# 
+# iso10min <- tt_wide_library[tt_wide_library$from_any < 11,] %>%
+#   st_union()
+# 
+# iso20min <- tt_wide_library[tt_wide_library$from_any < 21,] %>%
+#   st_union()
+# 
+# iso30min <- tt_wide_library[tt_wide_library$from_any < 31,] %>%
+#   st_union()
+# 
+# ggplot(Detroit_streets) +
+#   geom_sf(data = iso30min, 
+#           aes(fill = "Area within 30 minutes"), 
+#           color = NA) +
+#   geom_sf(data = iso20min, 
+#           aes(fill = "Area within 20 minutes"), 
+#           color = NA) +
+#   geom_sf(data = iso10min, 
+#           aes(fill = "Area within 10 minutes"), 
+#           color = NA) +
+#   geom_sf(alpha = 0.1) +
+#   scale_fill_manual(values = c(iso_pallete[1], 
+#                                iso_pallete[3],
+#                                iso_pallete[5]),
+#         name = "bike\ntime to the\nnearest library\n(minutes)") +
+#   coord_sf(crs = michigan_state_plane) +
+#   theme_map()
+
+plot(image_read("images/Keana_1B.png"))
+
+```
+
+```{r library grid, eval=FALSE}
+library_grid <- grid %>%
+  mutate(num_library = lengths(st_covers(grid, Detroit_library)))
+
+library_points <- st_centroid(library_grid)
+```
+
+#Alex's Libraries Reachable by Cycling Map, 3B
+```{r Libraries Reachable by Cycling Map 3B, eval=TRUE}
+# Detroit_library_access <- accessibility(r5r_core,
+#                         origins = library_points,
+#                         destinations = library_points,
+#                         mode = "BICYCLE",
+#                         opportunities_colname = "num_library",
+#                         decay_function = "step",
+#                         cutoffs = 11,
+#                         departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+#                                  format = "%d-%m-%Y %H:%M:%S"),
+#                         max_walk_dist = 5000,
+#                         time_window = 120,
+#                         percentiles = 50,
+#                         verbose = FALSE) %>%
+#   mutate(id = as.numeric(from_id)) %>%
+#   merge(grid)
+# 
+# st_geometry(Detroit_library_access) <- "geometry"
+# 
+# ggplot(Detroit_library_access) +
+#   geom_sf(aes(fill = accessibility), color = NA) +
+#   scale_fill_viridis_c(name = "Libraries\nwithin a 20-minute\nbicycle ride") +
+#   coord_sf(crs = michigan_state_plane) +
+#   theme_void()
+
+plot(image_read("images/Alex_3B.png"))
+
+```
+
+```{r library accessibility decay, eval=FALSE}
+Detroit_library_access <- accessibility(r5r_core,
+                        origins = library_points,
+                        destinations = library_points,
+                        mode = "BICYCLE",
+                        opportunities_colname = "num_library",
+                        decay_function = "exponential",
+                        cutoffs = 11,
+                        departure_datetime = as.POSIXct("15-11-2021 14:00:00",
+                                 format = "%d-%m-%Y %H:%M:%S"),
+                        max_walk_dist = 5000,
+                        time_window = 120,
+                        percentiles = 50,
+                        verbose = FALSE) %>%
+  mutate(id = as.numeric(from_id)) %>%
+  merge(grid)
+
+st_geometry(Detroit_library_access) <- "geometry"
+
+ggplot(Detroit_library_access) +
+  geom_sf(aes(fill = accessibility), color = NA) +
+  scale_fill_viridis_c(name = "Accessiblity score") +
+  coord_sf(crs = michigan_state_plane) +
+  theme_void()
+
+```
+
+```{r rasterize the accessibility output, eval=FALSE}
+st_write(Detroit_library_access, 'Detroit_library_access.geojson', append=FALSE, quiet=TRUE )
+
+access_poly_library <- st_read("Detroit_library_access.geojson", quiet=TRUE)
+
+access_raster_library <- st_rasterize(access_poly_library["accessibility"], 
+                              nx = 1000, ny = 1000) 
+```
+
+# Alex's Cycling to Library Accessibility Score Map, 4B
+```{r Cycling to Library Accessibility Score Map 4B, eval=TRUE}
+
+# ggplot(Detroit_streets) +
+#   geom_stars(data = access_raster_library) +
+#   geom_sf(color = "white", alpha = 0.05) +
+#   scale_fill_viridis_c(na.value = NA, 
+#                        option="A",
+#                        name = "Accessibility score \nof bicycle access to\nlibraries") +
+#   theme_void()
+
+plot(image_read("images/Alex_4B.png"))
+
+```
+
+```{r disengage r, eval=FALSE}
+
+stop_r5(r5r_core)
+
+```

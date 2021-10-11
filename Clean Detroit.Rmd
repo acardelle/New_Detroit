@@ -1,0 +1,39 @@
+---
+title: "R Detroit Webpage"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magick)
+library(cowplot)
+library(ggplot2)
+
+```
+
+## R Markdown
+
+```{r cars, eval=FALSE}
+#This is a test line
+plot(image_read("images/Aeshna_0A.png"))
+
+# p1 <- ggdraw() + draw_image("images/Aeshna_0A.png", scale = 1)
+# p2 <- ggdraw() + draw_image("images/Keana_0B.png", scale = 1)
+# 
+# plot_grid(p1, p2)
+
+```
+
+```{r school locations, echo=FALSE}
+
+plot(image_read("images/Aeshna_0A.png"))
+
+plot(image_read("images/Keana_0B.png"))
+
+```
+
+
+## Including Plots
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

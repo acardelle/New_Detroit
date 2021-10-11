@@ -59,6 +59,7 @@ ggplot(DET_streets) +
   coord_sf(crs = michigan_state_plane) 
 
 ```
+#KEANA creates the libraries here
 ```{r}
 DET_library <- oe_read("networks/bbbike_detroit.pbf", 
                    provider = "openstreetmap_fr", 
@@ -178,7 +179,7 @@ ggplot(DET_streets) +
 
 ```
 
-
+#KEANA switches to transit stops
 
 ```{r}
 DET_transit <- read_gtfs(file.path("networks", "gtfs.zip"))
